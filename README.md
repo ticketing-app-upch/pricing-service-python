@@ -13,7 +13,7 @@
 * Proveer pruebas unitarias con `pytest` para verificar la precisión de las reglas de negocio.
 
 ## 👥 Responsables
-* **Líder de Integración / Developer Backend 2:** Camilo Sebastian Silva Cuzqui y Jaren Aaron Pazmiño Reyna
+* **Líder de Integración / Developer Backend 2:** Camilo Silva y Jaren Pazmiño
 * **Supervisión de Arquitectura:** Vanesa Rioja
 
 ## 🛠️ Requisitos Previos
