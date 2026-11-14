@@ -2,7 +2,7 @@
 
 Laravel autentica al usuario, controla la apertura de ventas y confirma compras. Python mantiene el orden de llegada, aplica hasta tres admisiones en una ventana de cinco segundos y permite tres turnos admitidos simultáneos por evento. Cada pase firmado dura tres minutos.
 
-Ejecuta una sola instancia y un solo proceso. Un reinicio borra las posiciones activas. Los asistentes deben volver a la cola. Laravel conserva las órdenes y los pases consumidos. Python guarda los turnos vencidos y cancelados para Mercado en SQLite. Los estados avanzan al habilitar ventas y cuando la API opera sobre la cola.
+Python guarda los turnos y las admisiones en `virtual_queue_turns`, en el mismo PostgreSQL que usa Laravel. Un bloqueo por evento coordina las operaciones de distintas instancias de Python. La posición y los pases vigentes sobreviven a un reinicio del servicio si se conserva la clave privada RSA. Los estados avanzan al habilitar ventas y cuando la API opera sobre la cola.
 
 ## Configuración
 
@@ -23,17 +23,18 @@ openssl rand -hex 32
 | VIRTUAL_QUEUE_PASS_PUBLIC_KEY | Laravel | PEM público en Base64. |
 | VIRTUAL_QUEUE_URL | Laravel | URL interna accesible desde la API Laravel. |
 | HOST / PORT | Python | 0.0.0.0 y 8000 por defecto. |
-| VIRTUAL_QUEUE_OUTCOMES_DB | Python | Archivo SQLite de resultados. Por defecto, queue-outcomes.sqlite3 o /data/queue-outcomes.sqlite3 en Docker. Monta un volumen persistente en /data. |
+| VIRTUAL_QUEUE_DB_URL | Python | URL PostgreSQL de la base de Laravel. En Render, usa la conexión interna si ambos recursos están en la misma región y workspace. |
 
-Configura los secretos en el entorno de ejecución. Conecta los servicios en una red privada o mediante un proxy TLS de acceso restringido. La ruta GET /health sirve como comprobación de arranque.
+Configura los secretos en el entorno de ejecución. Usa un usuario PostgreSQL con acceso al esquema, permisos SELECT, INSERT y UPDATE en `virtual_queue_turns` y USAGE en `virtual_queue_turns_id_seq`.
 
 ~~~sh
 python -m pip install -r requirements.txt
-python -m unittest -v
 python server.py
 ~~~
 
-Para usar la imagen de Python 3.12 del Dockerfile, construye con docker build -t alpateck-queue . En Docker, coloca ambos contenedores en una red compartida y usa el nombre del contenedor Python en la URL interna. Ejecuta las migraciones de Laravel y vuelve a generar la caché de configuración si corresponde.
+En Render, despliega primero la migración `2026_11_14_000001_create_virtual_queue_turns_table.php` de Laravel. Después configura `VIRTUAL_QUEUE_DB_URL` y despliega Python. Python verifica que la tabla esté disponible antes de arrancar. Comprueba `GET /health` y el ingreso a la cola desde Laravel. Los turnos activos en memoria y los resultados históricos del SQLite anterior quedan fuera de esta migración. Si hay una cola activa durante el cambio, sus asistentes tendrán que volver a entrar.
+
+Para ejecutar `python -m unittest -v`, configura `VIRTUAL_QUEUE_TEST_DB_URL` con una base PostgreSQL desechable que tenga aplicada la migración. Las pruebas crean y eliminan turnos de eventos de prueba en esa base.
 
 ## Contrato entre servicios
 
