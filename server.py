@@ -1,6 +1,7 @@
 from base64 import b64decode
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import logging
 import os
 import re
 from secrets import compare_digest
@@ -8,6 +9,7 @@ from uuid import UUID
 
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
+from psycopg import Error as DatabaseError
 
 from virtual_queue import QueueError, VirtualQueue
 
@@ -86,6 +88,10 @@ class Handler(BaseHTTPRequestHandler):
         except QueueError as error:
             self.send_json(error.status, {"message": str(error)})
             return
+        except DatabaseError as error:
+            logging.error("Queue storage failed (%s).", type(error).__name__)
+            self.send_json(503, {"message": "La cola virtual no está disponible."})
+            return
         self.send_json(200, result)
 
     def setup(self):
@@ -114,10 +120,19 @@ def main():
     if not isinstance(key, RSAPrivateKey) or key.key_size < 2048:
         raise SystemExit("The purchase pass requires an RSA private key of at least 2048 bits.")
 
+    database_url = os.environ.get("VIRTUAL_QUEUE_DB_URL")
+    if not database_url:
+        raise SystemExit("Configure VIRTUAL_QUEUE_DB_URL for the shared PostgreSQL database.")
+    queue = VirtualQueue(key, database_url)
+    try:
+        queue.check_storage()
+    except DatabaseError as error:
+        raise SystemExit(f"Queue storage unavailable ({type(error).__name__}). Check the database and Laravel migrations.") from None
+
     host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", "8000"))
     with ThreadingHTTPServer((host, port), Handler) as server:
-        server.queue = VirtualQueue(key, outcomes_path=os.environ.get("VIRTUAL_QUEUE_OUTCOMES_DB", "queue-outcomes.sqlite3"))
+        server.queue = queue
         server.authorization = f"Bearer {token}".encode()
         print(f"Virtual queue listening on {host}:{port}", flush=True)
         server.serve_forever()
