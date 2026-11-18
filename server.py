@@ -11,9 +11,11 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from psycopg import Error as DatabaseError
 
+from anti_scalping import calculate_risk_score, valid_risk_request
 from virtual_queue import QueueError, VirtualQueue
 
 TURN_ROUTE = "/v1/turns/"
+RISK_ROUTE = "/api/v1/risk-score"
 ACTIONS = {"join", "status", "cancel", "open-payment", "validate", "complete", "advance", "conversion"}
 
 
@@ -56,6 +58,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(404, {"message": "Ruta no encontrada."})
 
     def do_POST(self):
+        if self.path == RISK_ROUTE:
+            self.post_risk_score()
+            return
+
         action = self.path.removeprefix(TURN_ROUTE)
         if not self.path.startswith(TURN_ROUTE) or action not in ACTIONS:
             self.send_json(404, {"message": "Ruta no encontrada."})
@@ -93,6 +99,27 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(503, {"message": "La cola virtual no está disponible."})
             return
         self.send_json(200, result)
+
+    def post_risk_score(self):
+        supplied_token = self.headers.get("Authorization", "").encode()
+        if not compare_digest(supplied_token, self.server.authorization):
+            self.send_json(401, {"message": "Credenciales de servicio inválidas."})
+            return
+
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            if not 0 < size <= 4096:
+                raise ValueError("Invalid body size")
+            data = json.loads(self.rfile.read(size))
+        except (ValueError, TimeoutError):
+            self.send_json(422, {"message": "Solicitud inválida."})
+            return
+
+        if not valid_risk_request(data):
+            self.send_json(422, {"message": "Solicitud inválida."})
+            return
+
+        self.send_json(200, calculate_risk_score(data))
 
     def setup(self):
         self.request.settimeout(5)
