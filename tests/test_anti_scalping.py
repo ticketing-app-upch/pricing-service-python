@@ -1,6 +1,6 @@
 import unittest
 
-from anti_scalping import (
+from app.services.anti_scalping import (
     account_score,
     calculate_risk_score,
     speed_score,
