@@ -8,7 +8,7 @@ from uuid import uuid4
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
-from virtual_queue import QueueError, VirtualQueue
+from app.services.virtual_queue import QueueError, VirtualQueue
 
 
 class VirtualQueueTest(unittest.TestCase):

@@ -6,6 +6,34 @@ Python guarda los turnos y las admisiones en `virtual_queue_turns`, en el mismo 
 
 Además, Python expone un motor de riesgo anti-scalping sin estado: calcula un score de 0 a 100 a partir del tiempo de compra, la antigüedad de la cuenta y la cantidad de entradas, y devuelve ALLOW o BLOCK. Laravel consulta ese endpoint antes de cobrar y emite el HTTP 429 al cliente cuando corresponde.
 
+La API está construida con FastAPI (uvicorn como servidor ASGI). Documentación interactiva en `GET /docs` (OpenAPI).
+
+## Estructura
+
+~~~
+app/
+├── main.py                 # create_app: middleware, handlers de error, routers
+├── config.py               # Settings.from_env (token, RSA, DB, host/port)
+├── auth.py                 # require_service_token (Bearer)
+├── validators.py           # valid_request / valid_id de la cola
+├── routers/
+│   ├── health.py           # GET /health
+│   ├── turns.py            # POST /v1/turns/{acción}
+│   └── risk_score.py       # POST /api/v1/risk-score
+├── schemas/
+│   └── risk.py             # RiskScoreRequest / RiskScoreResponse (Pydantic)
+└── services/
+    ├── virtual_queue.py    # lógica de la cola (sin dependencias web)
+    └── anti_scalping.py    # cálculo de riesgo (puro, sin estado)
+tests/
+├── test_api.py             # contratos HTTP (TestClient, sin DB)
+├── test_virtual_queue.py   # integración de cola (requiere DB)
+└── test_anti_scalping.py   # algoritmo anti-scalping
+server.py                   # valida entorno, verifica storage, arranca uvicorn
+~~~
+
+Cada funcionalidad vive aislada en su router + servicio: cambiar la cola o el motor de riesgo no toca el otro ni el cableado HTTP.
+
 ## Configuración
 
 Genera una clave RSA y un token de servicio con OpenSSL:
@@ -38,7 +66,13 @@ python server.py
 
 En Render, despliega primero la migración `2026_11_14_000001_create_virtual_queue_turns_table.php` de Laravel. Después configura `VIRTUAL_QUEUE_DB_URL` y despliega Python. Python verifica que la tabla esté disponible antes de arrancar. Comprueba `GET /health` y el ingreso a la cola desde Laravel. Los turnos activos en memoria y los resultados históricos del SQLite anterior quedan fuera de esta migración. Si hay una cola activa durante el cambio, sus asistentes tendrán que volver a entrar.
 
-Para ejecutar `python -m unittest -v`, configura `VIRTUAL_QUEUE_TEST_DB_URL` con una base PostgreSQL desechable que tenga aplicada la migración. Las pruebas crean y eliminan turnos de eventos de prueba en esa base. Las pruebas anti-scalping (`test_anti_scalping.py`) no necesitan base de datos y corren siempre.
+Para ejecutar la suite completa:
+
+~~~sh
+python -m unittest discover -s tests -v
+~~~
+
+Las pruebas de integración de la cola (`test_virtual_queue.py`) necesitan `VIRTUAL_QUEUE_TEST_DB_URL` con una base PostgreSQL desechable migrada; si no está configurada se omiten. Las pruebas de API (`test_api.py`) y anti-scalping (`test_anti_scalping.py`) no requieren base de datos y corren siempre.
 
 ## Contrato entre servicios
 
