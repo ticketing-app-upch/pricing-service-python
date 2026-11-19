@@ -29,6 +29,8 @@ tests/
 ├── test_api.py             # contratos HTTP (TestClient, sin DB)
 ├── test_virtual_queue.py   # integración de cola (requiere DB)
 └── test_anti_scalping.py   # algoritmo anti-scalping
+scripts/
+└── simulate_bot.py         # simulador bot vs humano (local o contra el endpoint real)
 server.py                   # valida entorno, verifica storage, arranca uvicorn
 ~~~
 
@@ -73,6 +75,31 @@ python -m unittest discover -s tests -v
 ~~~
 
 Las pruebas de integración de la cola (`test_virtual_queue.py`) necesitan `VIRTUAL_QUEUE_TEST_DB_URL` con una base PostgreSQL desechable migrada; si no está configurada se omiten. Las pruebas de API (`test_api.py`) y anti-scalping (`test_anti_scalping.py`) no requieren base de datos y corren siempre.
+
+## Endpoints
+
+Todos los POST aceptan y devuelven JSON. El acceso autenticado usa el mismo encabezado en ambos casos:
+
+~~~http
+Authorization: Bearer <VIRTUAL_QUEUE_SERVICE_TOKEN>
+~~~
+
+| Método y ruta | Acceso | Función |
+|---|---|---|
+| `GET /health` | Público | Sonda de salud para el orquestador. Responde `200` con `{"status":"ok"}` sin tocar la base. |
+| `GET /docs` | Público | Documentación OpenAPI generada por FastAPI (prueba interactiva de los endpoints). |
+| `POST /v1/turns/{acción}` | Bearer de servicio | API interna de la cola virtual. Opera turnos por evento según la acción (`join`, `status`, `cancel`, `open-payment`, `validate`, `complete`, `advance`, `conversion`). Laravel es el único cliente. Detalle en [Contrato entre servicios](#contrato-entre-servicios). |
+| `POST /api/v1/risk-score` | Bearer de servicio | Motor anti-scalping. Calcula el riesgo de la transacción actual y responde `ALLOW` o `BLOCK` (siempre `200` si el body es válido). Laravel lo consulta antes de cobrar. Detalle en [Motor anti-scalping](#motor-anti-scalping). |
+
+Códigos comunes:
+
+| Status | Cuándo |
+|---|---|
+| `200` | Operación exitosa. |
+| `401` | Token ausente o distinto de `VIRTUAL_QUEUE_SERVICE_TOKEN`. |
+| `404` | Ruta o acción de cola desconocida (se evalúa antes que la autenticación en `/v1/turns/{acción}`). |
+| `422` | Body inválido, fuera de rango o mayor a 4096 bytes: `{"message":"Solicitud inválida."}`. |
+| `503` | PostgreSQL no disponible al operar la cola: `{"message":"La cola virtual no está disponible."}`. |
 
 ## Contrato entre servicios
 
@@ -128,3 +155,14 @@ Cada sub-score va de 0 a 100:
 `R = 0.40·SV + 0.30·SA + 0.30·SN`. Compra sospechosa = muy rápido, cuenta nueva y muchas entradas.
 
 Ejemplo con Δt = 1.5 s, A = 10 h, N = 1: SV = 100, SA = 100, SN = 0 → R = 70.0 → BLOCK.
+
+### Simulador
+
+`scripts/simulate_bot.py` corre ocho escenarios (bots, humanos y dudosos) contra el motor y muestra `R`, `action` y el desglose SV/SA/SN:
+
+~~~sh
+python scripts/simulate_bot.py                                   # motor local (puro)
+python scripts/simulate_bot.py --mode http \
+  --url https://pricing-service-python.onrender.com \
+  --token "$VIRTUAL_QUEUE_SERVICE_TOKEN"                         # endpoint real
+~~~

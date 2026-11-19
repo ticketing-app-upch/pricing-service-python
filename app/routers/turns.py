@@ -33,6 +33,6 @@ async def turns(action: str, request: Request):
     except QueueError as error:
         raise HTTPException(error.status, {"message": str(error)}) from None
     except DatabaseError as error:
-        logging.error("Queue storage failed (%s).", type(error).__name__)
+        logging.error("Queue storage failed (%s): %s", type(error).__name__, error)
         raise HTTPException(503, {"message": "La cola virtual no está disponible."}) from None
     return result
