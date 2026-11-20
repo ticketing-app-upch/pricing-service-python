@@ -66,7 +66,7 @@ class VirtualQueueTest(unittest.TestCase):
         self.now += 5
         self.assertEqual(self.request("status", fourth)["status"], "ADMITTED")
 
-    def test_pass_is_signed_bound_to_turn_and_expires_in_three_minutes(self):
+    def test_pass_is_signed_bound_to_turn_and_expires_in_two_minutes(self):
         result = self.request("join")
         header, payload, signature = result["passToken"].split(".")
         self.signing_key.public_key().verify(
@@ -76,17 +76,17 @@ class VirtualQueueTest(unittest.TestCase):
         claims = json.loads(base64.urlsafe_b64decode(payload + "=="))
         self.assertEqual((claims["sub"], claims["eventId"]), ("1", self.event_id))
         self.assertEqual(result["queueToken"], claims["jti"])
-        self.assertEqual(claims["exp"] - claims["iat"], 180)
+        self.assertEqual(claims["exp"] - claims["iat"], 120)
         self.assertTrue(self.request("validate", turnId=claims["jti"])["valid"])
         self.request("open-payment", openedAt=self.now)
-        self.now += 179
+        self.now += 119
         self.request("open-payment", openedAt=self.now)
         with self.queue.connect() as db:
             turn = db.execute(
                 "SELECT payment_opened_at FROM virtual_queue_turns WHERE turn_id = %s",
                 (result["queueToken"],),
             ).fetchone()
-        self.assertEqual(turn["payment_opened_at"], self.now - 179)
+        self.assertEqual(turn["payment_opened_at"], self.now - 119)
         self.now += 1
         with self.assertRaisesRegex(QueueError, "vencido"):
             self.request("validate", turnId=claims["jti"])
@@ -122,7 +122,7 @@ class VirtualQueueTest(unittest.TestCase):
         expired = self.request("join", "1")["queueToken"]
         cancelled = self.request("join", "2")["queueToken"]
         self.request("cancel", "2")
-        self.now += 180
+        self.now += 120
         self.queue = self.new_service()
 
         outcomes = self.queue.conversion([self.event_id])["outcomes"]

@@ -1,6 +1,6 @@
 # Cola virtual y anti-scalping de AlpaTeck
 
-Laravel autentica al usuario, controla la apertura de ventas y confirma compras. Python mantiene el orden de llegada, aplica hasta tres admisiones en una ventana de cinco segundos y permite tres turnos admitidos simultáneos por evento. Cada pase firmado dura tres minutos.
+Laravel autentica al usuario, controla la apertura de ventas y confirma compras. Python mantiene el orden de llegada, aplica hasta tres admisiones en una ventana de cinco segundos y permite tres turnos admitidos simultáneos por evento. Cada pase nuevo dura dos minutos desde la admisión.
 
 Python guarda los turnos y las admisiones en `virtual_queue_turns`, en el mismo PostgreSQL que usa Laravel. Un bloqueo por evento coordina las operaciones de distintas instancias de Python. La posición y los pases vigentes sobreviven a un reinicio del servicio si se conserva la clave privada RSA. Los estados avanzan al habilitar ventas y cuando la API opera sobre la cola.
 
