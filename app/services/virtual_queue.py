@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 import psycopg
 from psycopg.rows import dict_row
 
-PASS_SECONDS = 180
+PASS_SECONDS = 120
 BATCH_SIZE = 3
 BATCH_SECONDS = 5
 ACTIVE_LIMIT = 3
@@ -199,7 +199,7 @@ class VirtualQueue:
             "sub": turn["user_id"],
             "eventId": turn["event_id"],
             "jti": str(turn["turn_id"]),
-            "iat": turn["expires_at"] - PASS_SECONDS,
+            "iat": int(turn["admitted_at"]),
             "exp": turn["expires_at"],
         }, separators=(",", ":")).encode())
         payload = header + b"." + claims
