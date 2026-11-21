@@ -17,7 +17,7 @@ def main():
         ) from None
     app = create_app(settings, queue)
     print(f"Virtual queue listening on {settings.host}:{settings.port}", flush=True)
-    uvicorn.run(app, host=settings.host, port=settings.port, log_level="warning")
+    uvicorn.run(app, host=settings.host, port=settings.port, log_level="info")
 
 
 if __name__ == "__main__":
