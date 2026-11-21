@@ -8,4 +8,4 @@ COPY app ./app
 
 USER 10001
 EXPOSE 8000
-CMD ["python", "-u", "server.py"]
+CMD ["python", "server.py"]
